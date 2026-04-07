@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use regex::Regex;
@@ -15,26 +16,17 @@ pub fn sanitize_filename(slug: &str) -> String {
 /// Rewrite internal DeepWiki links to local relative paths.
 ///
 /// Converts `https://deepwiki.com/{owner}/{repo}/{slug}` to `./{slug}.md`
-/// only if the slug is in the known list.
+/// only if the slug is in the known set. Uses a pre-compiled regex.
 pub fn rewrite_internal_links(
     content: &str,
-    owner: &str,
-    repo: &str,
-    known_slugs: &[String],
+    re: &Regex,
+    known_slugs: &HashSet<String>,
 ) -> String {
-    let pattern = format!(
-        r"\(https?://deepwiki\.com/{}/{}/([^)\s]+)\)",
-        regex::escape(owner),
-        regex::escape(repo)
-    );
-    let re = Regex::new(&pattern).unwrap();
-
     re.replace_all(content, |caps: &regex::Captures| {
         let slug = caps.get(1).unwrap().as_str();
-        if known_slugs.iter().any(|s| s == slug) {
+        if known_slugs.contains(slug) {
             format!("(./{}.md)", sanitize_filename(slug))
         } else {
-            // Keep original URL
             caps.get(0).unwrap().as_str().to_string()
         }
     })
@@ -49,13 +41,21 @@ pub fn format_directory(
     owner: &str,
     repo: &str,
 ) -> Vec<(PathBuf, String)> {
-    let known_slugs: Vec<String> = pages.iter().map(|p| p.slug.clone()).collect();
+    let known_slugs: HashSet<String> = pages.iter().map(|p| p.slug.clone()).collect();
+
+    // Pre-compile regex once for all pages
+    let pattern = format!(
+        r"\(https?://deepwiki\.com/{}/{}/([^)\s]+)\)",
+        regex::escape(owner),
+        regex::escape(repo)
+    );
+    let re = Regex::new(&pattern).unwrap();
 
     pages
         .iter()
         .map(|page| {
             let filename = format!("{}.md", sanitize_filename(&page.slug));
-            let content = rewrite_internal_links(&page.content, owner, repo, &known_slugs);
+            let content = rewrite_internal_links(&page.content, &re, &known_slugs);
             (PathBuf::from(filename), content)
         })
         .collect()
@@ -100,15 +100,21 @@ mod tests {
         assert_eq!(sanitize_filename("a/b\\c:d?e"), "a-b-c-d-e");
     }
 
+    fn make_link_regex(owner: &str, repo: &str) -> Regex {
+        let pattern = format!(
+            r"\(https?://deepwiki\.com/{}/{}/([^)\s]+)\)",
+            regex::escape(owner),
+            regex::escape(repo)
+        );
+        Regex::new(&pattern).unwrap()
+    }
+
     #[test]
     fn test_rewrite_links_known_slug() {
         let content = "See [architecture](https://deepwiki.com/owner/repo/1.1-arch) for details.";
-        let result = rewrite_internal_links(
-            content,
-            "owner",
-            "repo",
-            &["1.1-arch".to_string()],
-        );
+        let re = make_link_regex("owner", "repo");
+        let slugs: HashSet<String> = ["1.1-arch".to_string()].into();
+        let result = rewrite_internal_links(content, &re, &slugs);
         assert_eq!(
             result,
             "See [architecture](./1.1-arch.md) for details."
@@ -118,19 +124,18 @@ mod tests {
     #[test]
     fn test_rewrite_links_unknown_slug() {
         let content = "See [external](https://deepwiki.com/owner/repo/unknown-page) for details.";
-        let result = rewrite_internal_links(content, "owner", "repo", &[]);
-        assert_eq!(result, content); // Unchanged
+        let re = make_link_regex("owner", "repo");
+        let slugs: HashSet<String> = HashSet::new();
+        let result = rewrite_internal_links(content, &re, &slugs);
+        assert_eq!(result, content);
     }
 
     #[test]
     fn test_rewrite_links_mixed() {
         let content = "[a](https://deepwiki.com/o/r/known) and [b](https://deepwiki.com/o/r/unknown)";
-        let result = rewrite_internal_links(
-            content,
-            "o",
-            "r",
-            &["known".to_string()],
-        );
+        let re = make_link_regex("o", "r");
+        let slugs: HashSet<String> = ["known".to_string()].into();
+        let result = rewrite_internal_links(content, &re, &slugs);
         assert!(result.contains("(./known.md)"));
         assert!(result.contains("(https://deepwiki.com/o/r/unknown)"));
     }
@@ -138,7 +143,9 @@ mod tests {
     #[test]
     fn test_rewrite_links_no_links() {
         let content = "Just plain text with no links.";
-        let result = rewrite_internal_links(content, "o", "r", &[]);
+        let re = make_link_regex("o", "r");
+        let slugs: HashSet<String> = HashSet::new();
+        let result = rewrite_internal_links(content, &re, &slugs);
         assert_eq!(result, content);
     }
 

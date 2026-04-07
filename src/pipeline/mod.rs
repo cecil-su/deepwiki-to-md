@@ -30,7 +30,7 @@ pub fn pull(
 ) -> Result<Output, McpError> {
     // Validate --mermaid requires -o
     if options.mermaid.is_some() && matches!(options.output, OutputMode::Stdout) {
-        return Err(McpError::Transport {
+        return Err(McpError::InvalidArgs {
             message: "--mermaid requires -o to specify output directory or file.".to_string(),
         });
     }
@@ -40,7 +40,7 @@ pub fn pull(
         McpClient::connect(endpoint, options.timeout_connect, options.timeout_read)?;
 
     on_status("Fetching wiki structure...");
-    let structure_text = client.read_wiki_structure(&repo.as_str())?;
+    let structure_text = client.read_wiki_structure(&repo.to_string())?;
     let structure = wiki::parse_wiki_structure(&structure_text);
 
     if structure.is_empty() {
@@ -50,7 +50,7 @@ pub fn pull(
     }
 
     on_status("Fetching wiki contents...");
-    let contents_text = client.read_wiki_contents(&repo.as_str())?;
+    let contents_text = client.read_wiki_contents(&repo.to_string())?;
     let pages = wiki::split_pages(&contents_text, &structure);
 
     // Apply filters
@@ -61,7 +61,7 @@ pub fn pull(
     );
 
     if pages.is_empty() {
-        return Err(McpError::Transport {
+        return Err(McpError::InvalidArgs {
             message: "No pages remaining after filtering. Check --pages/--exclude values."
                 .to_string(),
         });
@@ -130,7 +130,7 @@ pub fn list(
         McpClient::connect(endpoint, options.timeout_connect, options.timeout_read)?;
 
     on_status("Fetching wiki structure...");
-    let structure_text = client.read_wiki_structure(&repo.as_str())?;
+    let structure_text = client.read_wiki_structure(&repo.to_string())?;
     let structure = wiki::parse_wiki_structure(&structure_text);
 
     if structure.is_empty() {
@@ -140,9 +140,9 @@ pub fn list(
     }
 
     let output = if options.json {
-        json::format_json_list(&repo.as_str(), &structure)
+        json::format_json_list(&repo.to_string(), &structure)
     } else {
-        json::format_text_list(&repo.as_str(), &structure)
+        json::format_text_list(&repo.to_string(), &structure)
     };
 
     Ok(output)

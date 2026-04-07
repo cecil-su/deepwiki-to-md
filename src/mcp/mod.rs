@@ -204,6 +204,9 @@ pub enum McpError {
     #[error("Response too large ({size} bytes, max {max} bytes). Try --pages to fetch specific sections.")]
     ResponseTooLarge { size: u64, max: u64 },
 
+    #[error("Invalid arguments: {message}")]
+    InvalidArgs { message: String },
+
     #[error("Transport error: {message}")]
     Transport { message: String },
 }

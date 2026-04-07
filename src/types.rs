@@ -8,12 +8,6 @@ pub struct RepoId {
     pub repo: String,
 }
 
-impl RepoId {
-    pub fn as_str(&self) -> String {
-        format!("{}/{}", self.owner, self.repo)
-    }
-}
-
 impl fmt::Display for RepoId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}/{}", self.owner, self.repo)

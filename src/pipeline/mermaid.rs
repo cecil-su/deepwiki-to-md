@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
 
 use regex::Regex;
 
@@ -15,7 +16,8 @@ pub struct MermaidBlock {
 
 /// Extract all mermaid code blocks from markdown content.
 pub fn extract_mermaid_blocks(content: &str) -> Vec<MermaidBlock> {
-    let re = Regex::new(r"(?ms)^```mermaid\s*\n(.*?)^```").unwrap();
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"(?ms)^```mermaid\s*\n(.*?)^```").unwrap());
     re.captures_iter(content)
         .map(|cap| MermaidBlock {
             full_match: cap.get(0).unwrap().as_str().to_string(),
@@ -24,13 +26,16 @@ pub fn extract_mermaid_blocks(content: &str) -> Vec<MermaidBlock> {
         .collect()
 }
 
-/// Check if mmdc (mermaid-cli) is available on the system.
+/// Check if mmdc (mermaid-cli) is available on the system (cached).
 pub fn is_mmdc_available() -> bool {
-    Command::new("mmdc")
-        .arg("--version")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    static AVAILABLE: OnceLock<bool> = OnceLock::new();
+    *AVAILABLE.get_or_init(|| {
+        Command::new("mmdc")
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    })
 }
 
 /// Render mermaid blocks in content, replacing code blocks with image references.

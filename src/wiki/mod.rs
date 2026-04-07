@@ -1,8 +1,29 @@
 pub mod filter;
 
+use std::sync::OnceLock;
+
 use regex::Regex;
 
 use crate::types::WikiPageMeta;
+
+fn numbered_entry_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"^(\d+(?:\.\d+)*)\s+(.+)$").unwrap())
+}
+
+fn page_separator_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?m)^\s*#\s+Page:\s*(.+?)\s*$").unwrap())
+}
+
+/// Convert a title to a URL-friendly slug.
+pub fn slugify(title: &str) -> String {
+    title
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join("-")
+}
 
 /// Parse the text returned by `read_wiki_structure` into structured page metadata.
 ///
@@ -42,19 +63,11 @@ pub fn parse_wiki_structure(text: &str) -> Vec<WikiPageMeta> {
 
 /// Parse a numbered entry like "1.2 Some Title" into (slug, title).
 fn parse_numbered_entry(s: &str) -> Option<(String, String)> {
-    let re = Regex::new(r"^(\d+(?:\.\d+)*)\s+(.+)$").unwrap();
+    let re = numbered_entry_regex();
     let caps = re.captures(s)?;
     let number = caps.get(1)?.as_str();
     let title = caps.get(2)?.as_str().trim();
-
-    // Build slug: "1.2" + "Some Title" → "1.2-some-title"
-    let slug_title = title
-        .to_lowercase()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join("-");
-    let slug = format!("{}-{}", number, slug_title);
-
+    let slug = format!("{}-{}", number, slugify(title));
     Some((slug, title.to_string()))
 }
 
@@ -71,7 +84,7 @@ pub fn split_pages(
     content: &str,
     structure: &[WikiPageMeta],
 ) -> Vec<crate::types::WikiPage> {
-    let re = Regex::new(r"(?m)^\s*#\s+Page:\s*(.+?)\s*$").unwrap();
+    let re = page_separator_regex();
 
     let mut pages = Vec::new();
     let mut matches: Vec<(usize, String)> = Vec::new();
@@ -100,11 +113,7 @@ pub fn split_pages(
             (m.slug.clone(), m.depth)
         } else {
             // Fallback: generate slug from title
-            let slug = title
-                .to_lowercase()
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join("-");
+            let slug = slugify(title);
             (slug, 0)
         };
 

@@ -2,6 +2,7 @@ use std::process;
 use std::time::Duration;
 
 use clap::{Parser, Subcommand};
+use deepwiki_dl::mcp::McpError;
 use deepwiki_dl::types::RepoId;
 use deepwiki_dl::{list, pull, resolve_output_mode, write_output, ListOptions, PullOptions};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -149,24 +150,25 @@ fn main() {
 }
 
 fn print_error(err: &Box<dyn std::error::Error>) {
-    let err_msg = err.to_string();
-    eprintln!("{} {}", yansi::Paint::red("Error:"), &err_msg);
-    if err_msg.contains("not indexed") {
-        eprintln!(
-            "\n{} Visit {} to add this repository.",
-            yansi::Paint::yellow("Hint:"),
-            "https://deepwiki.com"
-        );
-    } else if err_msg.contains("too large") {
-        eprintln!(
-            "\n{} Use --pages to fetch specific sections.",
-            yansi::Paint::yellow("Hint:"),
-        );
-    } else if err_msg.contains("--mermaid requires") {
-        eprintln!(
-            "\n{} Example: deepwiki-dl repo -o ./docs/ --mermaid svg",
-            yansi::Paint::yellow("Hint:"),
-        );
+    eprintln!("{} {}", yansi::Paint::red("Error:"), err);
+
+    // Downcast to McpError for typed hint matching
+    if let Some(mcp_err) = err.downcast_ref::<McpError>() {
+        let hint = match mcp_err {
+            McpError::RepoNotFound { .. } => {
+                Some("Visit https://deepwiki.com to add this repository.")
+            }
+            McpError::ResponseTooLarge { .. } => {
+                Some("Use --pages to fetch specific sections.")
+            }
+            McpError::InvalidArgs { .. } => {
+                Some("Example: deepwiki-dl repo -o ./docs/ --mermaid svg")
+            }
+            _ => None,
+        };
+        if let Some(hint) = hint {
+            eprintln!("\n{} {}", yansi::Paint::yellow("Hint:"), hint);
+        }
     }
 }
 
