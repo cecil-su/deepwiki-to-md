@@ -144,31 +144,28 @@ fn main() {
     };
 
     if let Err(e) = result {
-        print_error(&e);
-        process::exit(1);
-    }
-}
+        eprintln!("{} {}", yansi::Paint::red("Error:"), e);
 
-fn print_error(err: &Box<dyn std::error::Error>) {
-    eprintln!("{} {}", yansi::Paint::red("Error:"), err);
-
-    // Downcast to McpError for typed hint matching
-    if let Some(mcp_err) = err.downcast_ref::<McpError>() {
-        let hint = match mcp_err {
-            McpError::RepoNotFound { .. } => {
-                Some("Visit https://deepwiki.com to add this repository.")
+        // Downcast to McpError for typed hint matching
+        if let Some(mcp_err) = e.downcast_ref::<McpError>() {
+            let hint = match mcp_err {
+                McpError::RepoNotFound { .. } => {
+                    Some("Visit https://deepwiki.com to add this repository.")
+                }
+                McpError::ResponseTooLarge { .. } => {
+                    Some("Use --pages to fetch specific sections.")
+                }
+                McpError::InvalidArgs { .. } => {
+                    Some("Example: deepwiki-dl repo -o ./docs/ --mermaid svg")
+                }
+                _ => None,
+            };
+            if let Some(hint) = hint {
+                eprintln!("\n{} {}", yansi::Paint::yellow("Hint:"), hint);
             }
-            McpError::ResponseTooLarge { .. } => {
-                Some("Use --pages to fetch specific sections.")
-            }
-            McpError::InvalidArgs { .. } => {
-                Some("Example: deepwiki-dl repo -o ./docs/ --mermaid svg")
-            }
-            _ => None,
-        };
-        if let Some(hint) = hint {
-            eprintln!("\n{} {}", yansi::Paint::yellow("Hint:"), hint);
         }
+
+        process::exit(1);
     }
 }
 
@@ -186,6 +183,7 @@ fn make_spinner(quiet: bool) -> ProgressBar {
     spinner
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_pull(
     repo: RepoId,
     output: Option<String>,

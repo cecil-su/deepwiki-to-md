@@ -76,8 +76,8 @@ impl ToolResult {
     pub fn text(&self) -> String {
         self.content
             .iter()
-            .filter_map(|block| match block {
-                ContentBlock::Text { text } => Some(text.as_str()),
+            .map(|block| match block {
+                ContentBlock::Text { text } => text.as_str(),
             })
             .collect::<Vec<_>>()
             .join("\n")

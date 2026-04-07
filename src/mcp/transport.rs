@@ -17,7 +17,7 @@ impl McpTransport {
             ureq::config::Config::builder()
                 .timeout_connect(Some(timeout_connect))
                 .timeout_recv_body(Some(timeout_read))
-                .user_agent(&format!("deepwiki-dl/{}", env!("CARGO_PKG_VERSION")))
+                .user_agent(format!("deepwiki-dl/{}", env!("CARGO_PKG_VERSION")))
                 .build(),
         );
         Self {
