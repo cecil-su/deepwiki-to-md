@@ -1,5 +1,6 @@
 pub mod json;
 pub mod markdown;
+pub mod mermaid;
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -82,7 +83,23 @@ pub fn pull(
             }
         }
         OutputMode::Directory(dir) => {
-            let files = markdown::format_directory(&pages, &repo.owner, &repo.repo);
+            let mut files = markdown::format_directory(&pages, &repo.owner, &repo.repo);
+
+            // Apply mermaid rendering if requested
+            if let Some(ref format) = options.mermaid {
+                on_status("Rendering mermaid diagrams...");
+                for (path, content) in files.iter_mut() {
+                    let slug = path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("unknown");
+                    match mermaid::render_mermaid_in_content(content, format, dir, slug) {
+                        Ok((new_content, _)) => *content = new_content,
+                        Err(e) => eprintln!("Warning: mermaid rendering failed for {}: {e}", path.display()),
+                    }
+                }
+            }
+
             Output::Directory {
                 base_dir: dir.clone(),
                 files,

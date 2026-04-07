@@ -1,9 +1,10 @@
+use std::process;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use deepwiki_dl::types::RepoId;
-use deepwiki_dl::{pull, list, resolve_output_mode, write_output, PullOptions, ListOptions};
+use deepwiki_dl::{list, pull, resolve_output_mode, write_output, ListOptions, PullOptions};
+use indicatif::{ProgressBar, ProgressStyle};
 
 #[derive(Parser)]
 #[command(
@@ -96,10 +97,10 @@ fn parse_repo_id(s: &str) -> Result<RepoId, String> {
     s.parse()
 }
 
-fn main() -> Result<()> {
+fn main() {
     let cli = Cli::parse();
 
-    match cli.command {
+    let result = match cli.command {
         Some(Commands::Pull {
             repo,
             output,
@@ -139,7 +140,48 @@ fn main() -> Result<()> {
                 Ok(())
             }
         }
+    };
+
+    if let Err(e) = result {
+        print_error(&e);
+        process::exit(1);
     }
+}
+
+fn print_error(err: &Box<dyn std::error::Error>) {
+    let err_msg = err.to_string();
+    eprintln!("{} {}", yansi::Paint::red("Error:"), &err_msg);
+    if err_msg.contains("not indexed") {
+        eprintln!(
+            "\n{} Visit {} to add this repository.",
+            yansi::Paint::yellow("Hint:"),
+            "https://deepwiki.com"
+        );
+    } else if err_msg.contains("too large") {
+        eprintln!(
+            "\n{} Use --pages to fetch specific sections.",
+            yansi::Paint::yellow("Hint:"),
+        );
+    } else if err_msg.contains("--mermaid requires") {
+        eprintln!(
+            "\n{} Example: deepwiki-dl repo -o ./docs/ --mermaid svg",
+            yansi::Paint::yellow("Hint:"),
+        );
+    }
+}
+
+fn make_spinner(quiet: bool) -> ProgressBar {
+    if quiet {
+        return ProgressBar::hidden();
+    }
+    let spinner = ProgressBar::new_spinner();
+    spinner.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner:.cyan} {msg}")
+            .unwrap(),
+    );
+    spinner.enable_steady_tick(Duration::from_millis(80));
+    spinner
 }
 
 fn run_pull(
@@ -152,7 +194,7 @@ fn run_pull(
     verbose: bool,
     quiet: bool,
     no_color: bool,
-) -> Result<()> {
+) -> Result<(), Box<dyn std::error::Error>> {
     if no_color {
         yansi::disable();
     }
@@ -160,10 +202,9 @@ fn run_pull(
     let endpoint = std::env::var("DEEPWIKI_DL_MCP_ENDPOINT").ok();
     let output_mode = resolve_output_mode(output.as_deref(), &repo);
 
-    let status_fn: Box<dyn Fn(&str)> = if quiet {
-        Box::new(|_: &str| {})
-    } else {
-        Box::new(|msg: &str| eprintln!("{}", yansi::Paint::dim(msg)))
+    let spinner = make_spinner(quiet);
+    let status_fn = move |msg: &str| {
+        spinner.set_message(msg.to_string());
     };
 
     let options = PullOptions {
@@ -176,10 +217,12 @@ fn run_pull(
         verbose,
     };
 
-    let output = pull(&repo, &options, endpoint.as_deref(), &*status_fn)
-        .context("Failed to pull wiki")?;
+    let output = pull(&repo, &options, endpoint.as_deref(), &status_fn)?;
 
-    let result = write_output(output).context("Failed to write output")?;
+    // Finish spinner before writing to stdout
+    status_fn("Writing output...");
+
+    let result = write_output(output)?;
 
     if !quiet && result.files_written > 0 {
         let msg = format!(
@@ -199,17 +242,16 @@ fn run_list(
     verbose: bool,
     quiet: bool,
     no_color: bool,
-) -> Result<()> {
+) -> Result<(), Box<dyn std::error::Error>> {
     if no_color {
         yansi::disable();
     }
 
     let endpoint = std::env::var("DEEPWIKI_DL_MCP_ENDPOINT").ok();
 
-    let status_fn: Box<dyn Fn(&str)> = if quiet {
-        Box::new(|_: &str| {})
-    } else {
-        Box::new(|msg: &str| eprintln!("{}", yansi::Paint::dim(msg)))
+    let spinner = make_spinner(quiet);
+    let status_fn = move |msg: &str| {
+        spinner.set_message(msg.to_string());
     };
 
     let options = ListOptions {
@@ -219,8 +261,7 @@ fn run_list(
         verbose,
     };
 
-    let output = list(&repo, &options, endpoint.as_deref(), &*status_fn)
-        .context("Failed to list wiki structure")?;
+    let output = list(&repo, &options, endpoint.as_deref(), &status_fn)?;
 
     println!("{output}");
 
