@@ -1,9 +1,7 @@
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader};
 use std::time::Duration;
 
 use crate::mcp::types::{JsonRpcRequest, McpResponse};
-
-const MAX_RESPONSE_SIZE: u64 = 50 * 1024 * 1024; // 50MB
 
 /// Low-level HTTP transport for MCP JSON-RPC communication.
 pub struct McpTransport {
@@ -63,10 +61,10 @@ impl McpTransport {
         let body = response.into_body();
 
         let body_value = if content_type.contains("text/event-stream") {
-            let reader = BufReader::new(body.into_reader().take(MAX_RESPONSE_SIZE));
+            let reader = BufReader::new(body.into_reader());
             parse_sse_stream(reader)?
         } else {
-            let reader = body.into_reader().take(MAX_RESPONSE_SIZE);
+            let reader = body.into_reader();
             serde_json::from_reader(reader).map_err(TransportError::JsonParse)?
         };
 
@@ -142,9 +140,6 @@ pub enum TransportError {
 
     #[error("Failed to parse JSON response: {0}")]
     JsonParse(serde_json::Error),
-
-    #[error("Response too large ({size} bytes, max {max} bytes)")]
-    ResponseTooLarge { size: u64, max: u64 },
 
     #[error("No valid JSON-RPC response found in SSE stream")]
     NoSseResponse,

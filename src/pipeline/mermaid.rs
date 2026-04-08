@@ -1,9 +1,26 @@
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
 use regex::Regex;
+
+/// Supported output formats for mermaid diagram rendering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum MermaidFormat {
+    Svg,
+    Png,
+}
+
+impl fmt::Display for MermaidFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MermaidFormat::Svg => write!(f, "svg"),
+            MermaidFormat::Png => write!(f, "png"),
+        }
+    }
+}
 
 /// A mermaid code block found in markdown content.
 #[derive(Debug, PartialEq)]
@@ -43,10 +60,11 @@ pub fn is_mmdc_available() -> bool {
 /// Returns the modified content and a list of generated files.
 pub fn render_mermaid_in_content(
     content: &str,
-    format: &str,
+    fmt: MermaidFormat,
     assets_dir: &Path,
     slug: &str,
 ) -> Result<(String, Vec<PathBuf>), String> {
+    let ext = fmt.to_string();
     let blocks = extract_mermaid_blocks(content);
     if blocks.is_empty() {
         return Ok((content.to_string(), vec![]));
@@ -68,7 +86,7 @@ pub fn render_mermaid_in_content(
     let mut generated_files = Vec::new();
 
     for (i, block) in blocks.iter().enumerate() {
-        let filename = format!("{}-{:03}.{}", slug, i + 1, format);
+        let filename = format!("{}-{:03}.{}", slug, i + 1, ext);
         let output_path = mermaid_dir.join(&filename);
 
         // Write mermaid code to temp file
@@ -83,7 +101,7 @@ pub fn render_mermaid_in_content(
             .arg("-o")
             .arg(&output_path)
             .arg("-e")
-            .arg(format)
+            .arg(&ext)
             .output();
 
         // Clean up temp file

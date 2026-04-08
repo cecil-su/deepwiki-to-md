@@ -4,6 +4,7 @@ use std::time::Duration;
 use clap::{Parser, Subcommand};
 use deepwiki_dl::mcp::McpError;
 use deepwiki_dl::types::RepoId;
+use deepwiki_dl::pipeline::mermaid::MermaidFormat;
 use deepwiki_dl::{list, pull, resolve_output_mode, write_output, ListOptions, PullOptions};
 use indicatif::{ProgressBar, ProgressStyle};
 
@@ -26,8 +27,8 @@ struct Cli {
     output: Option<String>,
 
     /// Render mermaid diagrams to svg or png (requires -o)
-    #[arg(long, value_name = "FORMAT")]
-    mermaid: Option<String>,
+    #[arg(long, value_name = "FORMAT", value_enum)]
+    mermaid: Option<MermaidFormat>,
 
     /// Only fetch specific sections (comma-separated slugs)
     #[arg(short, long, value_delimiter = ',')]
@@ -40,10 +41,6 @@ struct Cli {
     /// Request timeout in seconds
     #[arg(short, long, default_value = "30")]
     timeout: u64,
-
-    /// Show detailed logs
-    #[arg(short, long)]
-    verbose: bool,
 
     /// Only output errors
     #[arg(short, long)]
@@ -62,16 +59,14 @@ enum Commands {
         repo: RepoId,
         #[arg(short, long)]
         output: Option<String>,
-        #[arg(long, value_name = "FORMAT")]
-        mermaid: Option<String>,
+        #[arg(long, value_name = "FORMAT", value_enum)]
+        mermaid: Option<MermaidFormat>,
         #[arg(short, long, value_delimiter = ',')]
         pages: Option<Vec<String>>,
         #[arg(short = 'x', long, value_delimiter = ',')]
         exclude: Option<Vec<String>>,
         #[arg(short, long, default_value = "30")]
         timeout: u64,
-        #[arg(short, long)]
-        verbose: bool,
         #[arg(short, long)]
         quiet: bool,
         #[arg(long)]
@@ -85,8 +80,6 @@ enum Commands {
         json: bool,
         #[arg(short, long, default_value = "30")]
         timeout: u64,
-        #[arg(short, long)]
-        verbose: bool,
         #[arg(short, long)]
         quiet: bool,
         #[arg(long)]
@@ -109,19 +102,17 @@ fn main() {
             pages,
             exclude,
             timeout,
-            verbose,
             quiet,
             no_color,
-        }) => run_pull(repo, output, mermaid, pages, exclude, timeout, verbose, quiet, no_color),
+        }) => run_pull(repo, output, mermaid, pages, exclude, timeout, quiet, no_color),
 
         Some(Commands::List {
             repo,
             json,
             timeout,
-            verbose,
             quiet,
             no_color,
-        }) => run_list(repo, json, timeout, verbose, quiet, no_color),
+        }) => run_list(repo, json, timeout, quiet, no_color),
 
         None => {
             if let Some(repo) = cli.repo {
@@ -132,7 +123,6 @@ fn main() {
                     cli.pages,
                     cli.exclude,
                     cli.timeout,
-                    cli.verbose,
                     cli.quiet,
                     cli.no_color,
                 )
@@ -151,9 +141,6 @@ fn main() {
             let hint = match mcp_err {
                 McpError::RepoNotFound { .. } => {
                     Some("Visit https://deepwiki.com to add this repository.")
-                }
-                McpError::ResponseTooLarge { .. } => {
-                    Some("Use --pages to fetch specific sections.")
                 }
                 McpError::InvalidArgs { .. } => {
                     Some("Example: deepwiki-dl repo -o ./docs/ --mermaid svg")
@@ -187,11 +174,10 @@ fn make_spinner(quiet: bool) -> ProgressBar {
 fn run_pull(
     repo: RepoId,
     output: Option<String>,
-    mermaid: Option<String>,
+    mermaid: Option<MermaidFormat>,
     pages: Option<Vec<String>>,
     exclude: Option<Vec<String>>,
     timeout: u64,
-    verbose: bool,
     quiet: bool,
     no_color: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -214,7 +200,6 @@ fn run_pull(
         timeout_connect: Duration::from_secs(timeout),
         timeout_read: Duration::from_secs(timeout * 4),
         mermaid,
-        verbose,
     };
 
     let output = pull(&repo, &options, endpoint.as_deref(), &status_fn)?;
@@ -239,7 +224,6 @@ fn run_list(
     repo: RepoId,
     json: bool,
     timeout: u64,
-    verbose: bool,
     quiet: bool,
     no_color: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -258,7 +242,6 @@ fn run_list(
         json,
         timeout_connect: Duration::from_secs(timeout),
         timeout_read: Duration::from_secs(timeout * 4),
-        verbose,
     };
 
     let output = list(&repo, &options, endpoint.as_deref(), &status_fn)?;

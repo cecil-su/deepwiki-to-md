@@ -17,8 +17,7 @@ pub struct PullOptions {
     pub exclude: Option<Vec<String>>,
     pub timeout_connect: Duration,
     pub timeout_read: Duration,
-    pub mermaid: Option<String>,
-    pub verbose: bool,
+    pub mermaid: Option<mermaid::MermaidFormat>,
 }
 
 /// Execute the `pull` command: fetch wiki and produce output.
@@ -28,7 +27,6 @@ pub fn pull(
     endpoint: Option<&str>,
     on_status: &dyn Fn(&str),
 ) -> Result<Output, McpError> {
-    // Validate --mermaid requires -o
     if options.mermaid.is_some() && matches!(options.output, OutputMode::Stdout) {
         return Err(McpError::InvalidArgs {
             message: "--mermaid requires -o to specify output directory or file.".to_string(),
@@ -93,7 +91,7 @@ pub fn pull(
                         .file_stem()
                         .and_then(|s| s.to_str())
                         .unwrap_or("unknown");
-                    match mermaid::render_mermaid_in_content(content, format, dir, slug) {
+                    match mermaid::render_mermaid_in_content(content, *format, dir, slug) {
                         Ok((new_content, _)) => *content = new_content,
                         Err(e) => eprintln!("Warning: mermaid rendering failed for {}: {e}", path.display()),
                     }
@@ -115,7 +113,6 @@ pub struct ListOptions {
     pub json: bool,
     pub timeout_connect: Duration,
     pub timeout_read: Duration,
-    pub verbose: bool,
 }
 
 /// Execute the `list` command: fetch structure and display.

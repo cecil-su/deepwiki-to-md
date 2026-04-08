@@ -201,9 +201,6 @@ pub enum McpError {
     #[error("Tool call failed ({tool}): {message}")]
     ToolError { tool: String, message: String },
 
-    #[error("Response too large ({size} bytes, max {max} bytes). Try --pages to fetch specific sections.")]
-    ResponseTooLarge { size: u64, max: u64 },
-
     #[error("Invalid arguments: {message}")]
     InvalidArgs { message: String },
 
